@@ -57,6 +57,16 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        terminal: {
+          red: "hsl(var(--terminal-red))",
+          "red-dark": "hsl(var(--terminal-red-dark))",
+          green: "hsl(var(--terminal-green))",
+          "green-dark": "hsl(var(--terminal-green-dark))",
+          cyan: "hsl(var(--terminal-cyan))",
+          "cyan-dark": "hsl(var(--terminal-cyan-dark))",
+          pink: "hsl(var(--terminal-pink))",
+          "pink-dark": "hsl(var(--terminal-pink-dark))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

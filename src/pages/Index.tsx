@@ -1,13 +1,20 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { ChatTerminal } from "@/components/ChatTerminal";
+import { LoginForm } from "@/components/LoginForm";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
+  const { user, isAuthenticated, login, logout, isLoading, error } = useAuth();
+
+  if (isAuthenticated && user) {
+    return <ChatTerminal username={user.username} onLogout={logout} />;
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <LoginForm 
+      onLogin={login}
+      isLoading={isLoading}
+      error={error}
+    />
   );
 };
 
