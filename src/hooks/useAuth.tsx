@@ -4,7 +4,10 @@ import { useToast } from './use-toast';
 interface User {
   username: string;
   isAuthenticated: boolean;
+  token: string;
 }
+
+const API_URL = 'http://localhost:3001/api';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -12,28 +15,31 @@ export const useAuth = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Simulate credential verification
+  // Real backend authentication
   const login = useCallback(async (username: string, password: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
 
-      // Simple credential validation (in real app, this would be backend verification)
-      if (password.length < 3) {
-        throw new Error('Password must be at least 3 characters');
-      }
+      const data = await response.json();
 
-      if (username.toLowerCase().includes('admin') && password !== 'secure123') {
-        throw new Error('Invalid admin credentials');
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Authentication failed');
       }
 
       // Successful login
       const authenticatedUser = {
-        username: username || `User_${Math.floor(Math.random() * 1000)}`,
-        isAuthenticated: true
+        username: data.user.username,
+        isAuthenticated: true,
+        token: data.token
       };
 
       setUser(authenticatedUser);

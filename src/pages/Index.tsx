@@ -6,7 +6,7 @@ const Index = () => {
   const { user, isAuthenticated, login, logout, isLoading, error } = useAuth();
 
   if (isAuthenticated && user) {
-    return <ChatTerminal username={user.username} onLogout={logout} />;
+    return <ChatTerminal username={user.username} token={user.token} onLogout={logout} />;
   }
 
   return (

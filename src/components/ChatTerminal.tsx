@@ -2,18 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
-
-interface Message {
-  id: string;
-  user: string;
-  text: string;
-  timestamp: Date;
-  type: 'message' | 'join' | 'leave' | 'system';
-  color?: string;
-}
+import { wsService, Message } from '@/services/websocket';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatTerminalProps {
   username: string;
+  token: string;
   onLogout: () => void;
 }
 
@@ -24,49 +18,90 @@ const TERMINAL_COLORS = [
   'terminal-red',
 ];
 
-export const ChatTerminal = ({ username, onLogout }: ChatTerminalProps) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      user: 'SYSTEM',
-      text: 'Welcome to this small corner of the internet!',
-      timestamp: new Date(),
-      type: 'system'
-    },
-    {
-      id: '2', 
-      user: 'SYSTEM',
-      text: 'This chat server was created to power small hacker friendly communities. Be cool and respectful to each other.',
-      timestamp: new Date(),
-      type: 'system'
-    },
-    {
-      id: '3',
-      user: 'SYSTEM', 
-      text: `Made with <3 by @kolobara • Powered by: http://lunatic.solutions`,
-      timestamp: new Date(),
-      type: 'system'
-    },
-    {
-      id: '4',
-      user: 'SYSTEM',
-      text: `Users online: 1`,
-      timestamp: new Date(),
-      type: 'system'
-    },
-    {
-      id: '5',
-      user: 'SYSTEM',
-      text: `Your starting name is ${username}.`,
-      timestamp: new Date(),
-      type: 'system'
-    }
-  ]);
-  
+export const ChatTerminal = ({ username, token, onLogout }: ChatTerminalProps) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [onlineUsers] = useState([username]);
+  const [currentChannel, setCurrentChannel] = useState('general');
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  // Connect to WebSocket server
+  useEffect(() => {
+    const socket = wsService.connect();
+    
+    // Join channel after connection
+    socket.on('connect', () => {
+      setIsConnected(true);
+      wsService.joinChannel(username, token, currentChannel);
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    // Handle incoming messages
+    wsService.onMessage((message) => {
+      setMessages(prev => [...prev, {
+        ...message,
+        timestamp: new Date(message.timestamp),
+        color: getUserColor(message.user)
+      }]);
+    });
+
+    // Handle system messages
+    wsService.onSystemMessage((message) => {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        user: 'SYSTEM',
+        text: message.text,
+        timestamp: new Date(message.timestamp),
+        type: 'system'
+      }]);
+    });
+
+    // Handle user join/leave
+    wsService.onUserJoined((data) => {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        user: 'SYSTEM',
+        text: `*** ${data.username} joined the channel`,
+        timestamp: new Date(data.timestamp),
+        type: 'join'
+      }]);
+    });
+
+    wsService.onUserLeft((data) => {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        user: 'SYSTEM', 
+        text: `*** ${data.username} left the channel`,
+        timestamp: new Date(data.timestamp),
+        type: 'leave'
+      }]);
+    });
+
+    // Handle clear messages
+    wsService.onClearMessages(() => {
+      setMessages([]);
+    });
+
+    // Handle errors
+    wsService.onError((error) => {
+      toast({
+        title: "Connection Error",
+        description: error.message,
+        variant: "destructive"
+      });
+    });
+
+    // Cleanup on unmount
+    return () => {
+      wsService.disconnect();
+    };
+  }, [username, token, currentChannel, toast]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -92,16 +127,8 @@ export const ChatTerminal = ({ username, onLogout }: ChatTerminalProps) => {
     if (input.startsWith('/')) {
       handleCommand(input);
     } else {
-      const newMessage: Message = {
-        id: Date.now().toString(),
-        user: username,
-        text: input,
-        timestamp: new Date(),
-        type: 'message',
-        color: getUserColor(username)
-      };
-      
-      setMessages(prev => [...prev, newMessage]);
+      // Send message through WebSocket
+      wsService.sendMessage(input, currentChannel);
     }
     
     setInput('');
@@ -111,32 +138,14 @@ export const ChatTerminal = ({ username, onLogout }: ChatTerminalProps) => {
     const [cmd, ...args] = command.slice(1).split(' ');
     
     switch (cmd.toLowerCase()) {
-      case 'help':
-        addSystemMessage('Available commands: /help, /users, /clear, /quit');
-        break;
-      case 'users':
-        addSystemMessage(`Online users: ${onlineUsers.join(', ')}`);
-        break;
-      case 'clear':
-        setMessages([]);
-        break;
       case 'quit':
+        wsService.disconnect();
         onLogout();
         break;
       default:
-        addSystemMessage(`Unknown command: /${cmd}. Type /help for available commands.`);
+        // Send command to server
+        wsService.sendCommand(command);
     }
-  };
-
-  const addSystemMessage = (text: string) => {
-    const systemMessage: Message = {
-      id: Date.now().toString(),
-      user: 'SYSTEM',
-      text,
-      timestamp: new Date(),
-      type: 'system'
-    };
-    setMessages(prev => [...prev, systemMessage]);
   };
 
   const formatTime = (date: Date) => {
@@ -171,7 +180,7 @@ export const ChatTerminal = ({ username, onLogout }: ChatTerminalProps) => {
       <div className="border-b border-primary/30 p-4">
         <div className="flex justify-between items-center terminal-text">
           <div className="text-terminal-cyan">
-            Terminal 1: telnet (82x29) • #general • {onlineUsers.length} users
+            Terminal 1: telnet (82x29) • #{currentChannel} • {isConnected ? 'ONLINE' : 'OFFLINE'}
           </div>
           <div className="flex gap-4 text-sm">
             <span className="text-terminal-green">Welcome</span>
